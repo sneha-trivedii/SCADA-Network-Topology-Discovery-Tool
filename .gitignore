@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+.env
+data/topology.json
+data/topology_prev.json
+data/*.db
+*.log
+.DS_Store
