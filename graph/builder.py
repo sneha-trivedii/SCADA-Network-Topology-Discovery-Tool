@@ -68,7 +68,7 @@ def build_graph(topology: dict) -> nx.Graph:
             conn["to"],
             from_if      = conn.get("from_if", ""),
             to_if        = conn.get("to_if", ""),
-            srtt_ms      = conn.get("srtt_ms", 0),
+            srtt_ms      = int(conn.get("srtt_ms", 0) or 0),
             mac          = conn.get("mac", ""),
             neighbour_ip = conn.get("neighbour_ip", "")
         )
