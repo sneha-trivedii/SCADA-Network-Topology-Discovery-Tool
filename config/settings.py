@@ -13,7 +13,7 @@ SNMP_CONFIG = {
 # R1/R2/R3 are c7200 — support AES128
 # R4-SWL4 are c3745 — DES only
 DEVICES = [
-    {"id": "R1",    "ip": "192.168.100.1",  "hostname": "R1",    "tier": "core",         "priv": "AES128"},
+    {"id": "R1",    "ip": "192.168.235.136",  "hostname": "R1",    "tier": "core",         "priv": "AES128"},
     {"id": "R2",    "ip": "10.0.1.2",        "hostname": "R2",    "tier": "distribution", "priv": "AES128"},
     {"id": "R3",    "ip": "10.0.2.2",        "hostname": "R3",    "tier": "distribution", "priv": "AES128"},
     {"id": "R4",    "ip": "10.0.4.2",        "hostname": "R4",    "tier": "dist-access",  "priv": "DES"},

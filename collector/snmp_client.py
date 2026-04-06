@@ -40,7 +40,7 @@ def snmp_get(ip: str, oid: str, priv_type: str = "AES128"):
     iterator = getCmd(
         SnmpEngine(),
         _build_usm(priv_type),
-        UdpTransportTarget((ip, 161), timeout=2, retries=1),
+        UdpTransportTarget((ip, 161), timeout=5, retries=1),
         ContextData(),
         ObjectType(ObjectIdentity(oid))
     )
@@ -67,7 +67,7 @@ def snmp_walk(ip: str, oid: str, priv_type: str = "AES128"):
     for errorIndication, errorStatus, errorIndex, varBinds in nextCmd(
         SnmpEngine(),
         _build_usm(priv_type),
-        UdpTransportTarget((ip, 161), timeout=2, retries=1),
+        UdpTransportTarget((ip, 161), timeout=5, retries=1),
         ContextData(),
         ObjectType(ObjectIdentity(oid)),
         lexicographicMode=False  # stop when we leave the subtree
