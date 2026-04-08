@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIL SCADA — Network Topology</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Barlow+Condensed:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0a0e13;
+    --bg2:       #0f1520;
+    --bg3:       #151d2e;
+    --amber:     #f59e0b;
+    --amber-dim: #92600a;
+    --teal:      #06b6d4;
+    --green:     #10b981;
+    --red:       #ef4444;
+    --purple:    #8b5cf6;
+    --text:      #cbd5e1;
+    --text-dim:  #475569;
+    --border:    #1e2d42;
+    --glow-a:    rgba(245,158,11,0.15);
+    --glow-t:    rgba(6,182,212,0.15);
+
+    /* tier colours */
+    --core:       #f59e0b;
+    --dist:       #06b6d4;
+    --dist-acc:   #8b5cf6;
+    --access:     #10b981;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text);
+    font-family: 'JetBrains Mono', monospace; overflow: hidden; }
+
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px; opacity: 0.25; pointer-events: none;
+  }
+
+  body::after {
+    content: ''; position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px,
+      rgba(0,0,0,0.02) 2px, rgba(0,0,0,0.02) 4px);
+    pointer-events: none; z-index: 200;
+  }
+
+  /* ── Layout ── */
+  .layout { display: grid; grid-template-rows: 52px 1fr; grid-template-columns: 1fr 320px;
+    height: 100vh; grid-template-areas: "header header" "canvas sidebar"; }
+
+  /* ── Header ── */
+  .header {
+    grid-area: header;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 20px; gap: 24px;
+    position: relative; z-index: 10;
+  }
+
+  .header::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--amber), var(--teal), transparent);
+    opacity: 0.6;
+  }
+
+  .header-logo { display: flex; align-items: center; gap: 10px; }
+  .header-logo svg { width: 28px; height: 28px; }
+
+  .header-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 16px; font-weight: 700; color: #f1f5f9;
+    letter-spacing: 0.1em;
+  }
+
+  .header-subtitle {
+    font-size: 9px; color: var(--text-dim); letter-spacing: 0.25em;
+    text-transform: uppercase;
+  }
+
+  .header-divider { width: 1px; height: 28px; background: var(--border); margin: 0 4px; }
+
+  .stat-pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 12px; border: 1px solid var(--border);
+    background: var(--bg3); font-size: 10px;
+  }
+
+  .stat-pill .val {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 18px; font-weight: 700; line-height: 1;
+  }
+
+  .stat-pill .lbl { color: var(--text-dim); font-size: 8px;
+    letter-spacing: 0.2em; text-transform: uppercase; }
+
+  .health-badge {
+    margin-left: auto; display: flex; align-items: center; gap: 8px;
+    padding: 4px 14px; border: 1px solid;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.25em; text-transform: uppercase;
+  }
+
+  .health-badge.healthy  { border-color: var(--green); color: var(--green); }
+  .health-badge.warning  { border-color: var(--amber); color: var(--amber); }
+  .health-badge.critical { border-color: var(--red);   color: var(--red); animation: blink 1s step-end infinite; }
+
+  @keyframes blink { 50% { opacity: 0.4; } }
+
+  .health-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+    animation: pulse 2s infinite; }
+
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+  .header-time { font-size: 11px; color: var(--text-dim); margin-left: 8px; }
+
+  .btn-sm {
+    background: none; border: 1px solid var(--border); color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    padding: 5px 12px; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-sm:hover { border-color: var(--amber); color: var(--amber); }
+
+  /* ── Canvas ── */
+  .canvas-area {
+    grid-area: canvas; position: relative; overflow: hidden;
+  }
+
+  #topology-svg { width: 100%; height: 100%; }
+
+  .canvas-label {
+    position: absolute; top: 16px; left: 16px;
+    font-size: 8px; letter-spacing: 0.3em; color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  /* ── Legend ── */
+  .legend {
+    position: absolute; bottom: 16px; left: 16px;
+    display: flex; gap: 16px;
+  }
+
+  .legend-item { display: flex; align-items: center; gap: 6px;
+    font-size: 9px; color: var(--text-dim); letter-spacing: 0.15em; }
+
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    grid-area: sidebar;
+    background: var(--bg2);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-section {
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .sidebar-section-header {
+    padding: 12px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer;
+  }
+
+  .section-title {
+    font-size: 8px; letter-spacing: 0.3em; color: var(--amber);
+    text-transform: uppercase; display: flex; align-items: center; gap: 8px;
+  }
+
+  .section-title::before {
+    content: ''; display: block; width: 12px; height: 1px; background: var(--amber);
+  }
+
+  .section-count {
+    font-size: 9px; color: var(--text-dim);
+    background: var(--bg3); border: 1px solid var(--border);
+    padding: 1px 6px;
+  }
+
+  /* Device list */
+  .device-list { max-height: 200px; overflow-y: auto; }
+  .device-list::-webkit-scrollbar { width: 3px; }
+  .device-list::-webkit-scrollbar-track { background: var(--bg); }
+  .device-list::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .device-row {
+    padding: 8px 16px; display: flex; align-items: center; gap: 10px;
+    cursor: pointer; transition: background 0.15s; border-bottom: 1px solid rgba(30,45,66,0.5);
+  }
+  .device-row:hover { background: var(--bg3); }
+
+  .device-tier-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .device-name { font-size: 11px; color: var(--text); flex: 1; }
+  .device-ip   { font-size: 9px;  color: var(--text-dim); }
+  .device-status { width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+    animation: pulse 2s infinite; flex-shrink: 0; }
+
+  /* Alerts */
+  .alerts-list { flex: 1; overflow-y: auto; }
+  .alerts-list::-webkit-scrollbar { width: 3px; }
+  .alerts-list::-webkit-scrollbar-track { background: var(--bg); }
+  .alerts-list::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .alert-row {
+    padding: 10px 16px; border-bottom: 1px solid rgba(30,45,66,0.5);
+    cursor: pointer; transition: background 0.15s;
+    border-left: 2px solid transparent;
+  }
+  .alert-row:hover { background: var(--bg3); }
+  .alert-row.CRITICAL { border-left-color: var(--red); }
+  .alert-row.HIGH     { border-left-color: var(--amber); }
+  .alert-row.MEDIUM   { border-left-color: var(--teal); }
+
+  .alert-type {
+    font-size: 8px; letter-spacing: 0.2em; font-weight: 700;
+    text-transform: uppercase; margin-bottom: 3px;
+  }
+  .alert-type.CRITICAL { color: var(--red); }
+  .alert-type.HIGH     { color: var(--amber); }
+  .alert-type.MEDIUM   { color: var(--teal); }
+
+  .alert-msg  { font-size: 10px; color: var(--text); line-height: 1.4; margin-bottom: 3px; }
+  .alert-time { font-size: 8px; color: var(--text-dim); }
+
+  .ack-btn {
+    background: none; border: 1px solid var(--border); color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace; font-size: 8px;
+    letter-spacing: 0.15em; padding: 2px 8px; cursor: pointer;
+    transition: all 0.2s; margin-top: 4px;
+  }
+  .ack-btn:hover { border-color: var(--green); color: var(--green); }
+
+  .no-alerts {
+    padding: 24px 16px; text-align: center;
+    font-size: 10px; color: var(--text-dim);
+  }
+
+  /* Node tooltip */
+  .tooltip {
+    position: fixed; background: var(--bg2); border: 1px solid var(--amber);
+    padding: 12px 16px; font-size: 10px; pointer-events: none;
+    display: none; z-index: 300; min-width: 180px;
+    box-shadow: 0 0 20px var(--glow-a);
+  }
+
+  .tooltip-name { font-family: 'Barlow Condensed', sans-serif;
+    font-size: 18px; font-weight: 700; color: #f1f5f9; margin-bottom: 6px; }
+
+  .tooltip-row { display: flex; justify-content: space-between;
+    gap: 16px; margin-bottom: 3px; }
+
+  .tooltip-key { color: var(--text-dim); font-size: 9px; letter-spacing: 0.15em; }
+  .tooltip-val { color: var(--text); text-align: right; }
+
+  /* Selected node panel */
+  .node-detail {
+    padding: 12px 16px; font-size: 10px;
+    border-bottom: 1px solid var(--border);
+    display: none;
+  }
+
+  .node-detail.visible { display: block; }
+  .node-detail-name { font-family: 'Barlow Condensed', sans-serif;
+    font-size: 20px; font-weight: 700; color: #f1f5f9; margin-bottom: 8px; }
+
+  .node-detail-row { display: flex; justify-content: space-between;
+    padding: 3px 0; border-bottom: 1px solid rgba(30,45,66,0.4); }
+
+  .node-detail-key { color: var(--text-dim); font-size: 9px; letter-spacing: 0.1em; }
+  .node-detail-val { color: var(--text); font-size: 10px; }
+
+  /* D3 node/link styles */
+  .link { stroke: #1e2d42; stroke-width: 1.5; transition: stroke 0.3s; }
+  .link:hover { stroke: var(--amber); }
+  .link.highlight { stroke: var(--amber); stroke-width: 2.5; }
+
+  .node circle {
+    stroke-width: 2; cursor: pointer;
+    filter: drop-shadow(0 0 6px currentColor);
+    transition: r 0.2s;
+  }
+
+  .node:hover circle { stroke-width: 3; }
+
+  .node text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; fill: var(--text);
+    pointer-events: none; text-anchor: middle;
+  }
+
+  .node .ip-label {
+    font-size: 8px; fill: var(--text-dim);
+  }
+
+  /* Loading overlay */
+  .loading {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px;
+    background: var(--bg); z-index: 50;
+  }
+
+  .loading-ring {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 2px solid var(--border);
+    border-top-color: var(--amber);
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-text { font-size: 10px; color: var(--text-dim);
+    letter-spacing: 0.3em; text-transform: uppercase; }
+
+  /* Refresh indicator */
+  .refresh-bar {
+    position: absolute; bottom: 0; left: 0; height: 2px;
+    background: var(--teal); transition: width linear;
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-logo">
+      <svg viewBox="0 0 28 28" fill="none">
+        <circle cx="14" cy="14" r="12" stroke="#f59e0b" stroke-width="1.2" stroke-dasharray="3 2"/>
+        <circle cx="14" cy="14" r="2" fill="#f59e0b"/>
+        <line x1="14" y1="4"  x2="14" y2="10" stroke="#f59e0b" stroke-width="1.2"/>
+        <line x1="14" y1="18" x2="14" y2="24" stroke="#f59e0b" stroke-width="1.2"/>
+        <line x1="4"  y1="14" x2="10" y2="14" stroke="#f59e0b" stroke-width="1.2"/>
+        <line x1="18" y1="14" x2="24" y2="14" stroke="#f59e0b" stroke-width="1.2"/>
+        <circle cx="14" cy="4"  r="2" fill="#06b6d4"/>
+        <circle cx="24" cy="14" r="2" fill="#06b6d4"/>
+        <circle cx="14" cy="24" r="2" fill="#06b6d4"/>
+        <circle cx="4"  cy="14" r="2" fill="#06b6d4"/>
+      </svg>
+    </div>
+    <div>
+      <div class="header-title">TOPOLOGY MONITOR</div>
+      <div class="header-subtitle">GAIL India · SCADA Network Operations</div>
+    </div>
+
+    <div class="header-divider"></div>
+
+    <div class="stat-pill">
+      <div>
+        <div class="val" id="stat-devices" style="color:var(--teal)">—</div>
+        <div class="lbl">Devices</div>
+      </div>
+    </div>
+    <div class="stat-pill">
+      <div>
+        <div class="val" id="stat-links" style="color:var(--amber)">—</div>
+        <div class="lbl">Links</div>
+      </div>
+    </div>
+    <div class="stat-pill">
+      <div>
+        <div class="val" id="stat-alerts" style="color:var(--red)">—</div>
+        <div class="lbl">Alerts</div>
+      </div>
+    </div>
+
+    <div class="header-divider"></div>
+
+    <div class="health-badge healthy" id="health-badge">
+      <div class="health-dot"></div>
+      <span id="health-text">HEALTHY</span>
+    </div>
+
+    <div class="header-time" id="header-time"></div>
+    <button class="btn-sm" onclick="refreshAll()">↺ REFRESH</button>
+    <button class="btn-sm" onclick="logout()">LOGOUT</button>
+  </header>
+
+  <!-- Topology Canvas -->
+  <div class="canvas-area" id="canvas-area">
+    <div class="loading" id="loading">
+      <div class="loading-ring"></div>
+      <div class="loading-text">Initialising topology scan...</div>
+    </div>
+
+    <div class="canvas-label">NETWORK TOPOLOGY — LIVE VIEW</div>
+    <svg id="topology-svg"></svg>
+
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--core)"></div>
+        <span>Core</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--dist)"></div>
+        <span>Distribution</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--dist-acc)"></div>
+        <span>Dist-Access</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--access)"></div>
+        <span>Access</span>
+      </div>
+    </div>
+
+    <div class="refresh-bar" id="refresh-bar"></div>
+  </div>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+
+    <!-- Selected node detail -->
+    <div class="node-detail" id="node-detail">
+      <div class="node-detail-name" id="nd-name">—</div>
+      <div id="nd-rows"></div>
+    </div>
+
+    <!-- Devices -->
+    <div class="sidebar-section">
+      <div class="sidebar-section-header">
+        <div class="section-title">Devices</div>
+        <div class="section-count" id="dev-count">0</div>
+      </div>
+      <div class="device-list" id="device-list"></div>
+    </div>
+
+    <!-- Alerts -->
+    <div class="sidebar-section" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+      <div class="sidebar-section-header">
+        <div class="section-title">Active Alerts</div>
+        <div class="section-count" id="alert-count">0</div>
+      </div>
+      <div class="alerts-list" id="alerts-list"></div>
+    </div>
+
+  </aside>
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip">
+  <div class="tooltip-name" id="tt-name"></div>
+  <div id="tt-rows"></div>
+</div>
+
+<script>
+const API = '';
+let TOKEN = localStorage.getItem('token');
+let topologyData = null;
+let simulation   = null;
+let REFRESH_INTERVAL = 60;
+let refreshTimer = null;
+
+// ── Auth check ────────────────────────────────────────────────────────────
+if (!TOKEN) { window.location.href = '/login'; }
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+const headers = () => ({ 'Authorization': `Bearer ${TOKEN}` });
+
+async function apiFetch(path) {
+  const res = await fetch(API + path, { headers: headers() });
+  if (res.status === 401) { window.location.href = '/login'; }
+  return res.json();
+}
+
+function tierColor(tier) {
+  const map = {
+    'core': 'var(--core)',
+    'distribution': 'var(--dist)',
+    'dist-access': 'var(--dist-acc)',
+    'access': 'var(--access)'
+  };
+  return map[tier] || 'var(--text-dim)';
+}
+
+function tierColorHex(tier) {
+  const map = {
+    'core': '#f59e0b',
+    'distribution': '#06b6d4',
+    'dist-access': '#8b5cf6',
+    'access': '#10b981'
+  };
+  return map[tier] || '#475569';
+}
+
+function timeAgo(iso) {
+  const diff = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (diff < 60)  return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  return `${Math.floor(diff/3600)}h ago`;
+}
+
+// ── Clock ─────────────────────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('header-time').textContent =
+    new Date().toLocaleTimeString('en-GB', {hour12:false}) + ' IST';
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ── Load data ─────────────────────────────────────────────────────────────
+async function loadTopology() {
+  const data = await apiFetch('/api/topology');
+  topologyData = data;
+  document.getElementById('stat-devices').textContent = data.devices.length;
+  document.getElementById('stat-links').textContent   = data.connections.length;
+  renderDeviceList(data.devices);
+  drawTopology(data.devices, data.connections);
+}
+
+async function loadAlerts() {
+  const data = await apiFetch('/api/alerts?only_unacked=true&limit=20');
+  document.getElementById('stat-alerts').textContent = data.count;
+  document.getElementById('alert-count').textContent = data.count;
+  renderAlerts(data.alerts);
+  updateHealthBadge(data.count);
+}
+
+async function loadHealth() {
+  const data = await apiFetch('/api/health');
+  const badge = document.getElementById('health-badge');
+  const text  = document.getElementById('health-text');
+  badge.className = `health-badge ${data.status.toLowerCase()}`;
+  text.textContent = data.status;
+}
+
+async function refreshAll() {
+  await Promise.all([loadTopology(), loadAlerts(), loadHealth()]);
+  startRefreshBar();
+}
+
+function updateHealthBadge(alertCount) {
+  const badge = document.getElementById('health-badge');
+  const text  = document.getElementById('health-text');
+  if (alertCount === 0) {
+    badge.className = 'health-badge healthy';
+    text.textContent = 'HEALTHY';
+  } else {
+    badge.className = 'health-badge warning';
+    text.textContent = `${alertCount} ALERT${alertCount>1?'S':''}`;
+  }
+}
+
+// ── Device list ───────────────────────────────────────────────────────────
+function renderDeviceList(devices) {
+  const el = document.getElementById('device-list');
+  document.getElementById('dev-count').textContent = devices.length;
+  el.innerHTML = devices.map(d => `
+    <div class="device-row" onclick="highlightNode('${d.device_id}')">
+      <div class="device-tier-dot" style="background:${tierColor(d.tier)}"></div>
+      <div class="device-name">${d.device_id}</div>
+      <div class="device-ip">${d.ip}</div>
+      <div class="device-status"></div>
+    </div>
+  `).join('');
+}
+
+// ── Alerts ────────────────────────────────────────────────────────────────
+function renderAlerts(alerts) {
+  const el = document.getElementById('alerts-list');
+  if (!alerts.length) {
+    el.innerHTML = `<div class="no-alerts">
+      <div style="color:var(--green);margin-bottom:6px;">✓</div>
+      No active alerts
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = alerts.map(a => `
+    <div class="alert-row ${a.severity}">
+      <div class="alert-type ${a.severity}">${a.type}</div>
+      <div class="alert-msg">${a.message}</div>
+      <div class="alert-time">${timeAgo(a.timestamp)}</div>
+      <button class="ack-btn" onclick="ackAlert(${a.id}, this)">ACK</button>
+    </div>
+  `).join('');
+}
+
+async function ackAlert(id, btn) {
+  await fetch(`${API}/api/alerts/${id}/ack`, { method:'POST', headers: headers() });
+  btn.closest('.alert-row').style.opacity = '0.3';
+  btn.textContent = '✓';
+  await loadAlerts();
+}
+
+// ── D3 Topology ───────────────────────────────────────────────────────────
+function drawTopology(devices, connections) {
+  document.getElementById('loading').style.display = 'none';
+
+  const svg  = d3.select('#topology-svg');
+  svg.selectAll('*').remove();
+
+  const W = document.getElementById('canvas-area').clientWidth;
+  const H = document.getElementById('canvas-area').clientHeight;
+
+  const g = svg.append('g');
+
+  // Zoom
+  svg.call(d3.zoom()
+    .scaleExtent([0.3, 3])
+    .on('zoom', e => g.attr('transform', e.transform))
+  );
+
+  // Build nodes and links for D3
+  const nodes = devices.map(d => ({
+    id:   d.device_id,
+    ip:   d.ip,
+    tier: d.tier
+  }));
+
+  const links = connections.map(c => ({
+    source: c.from,
+    target: c.to,
+    srtt:   c.srtt_ms
+  }));
+
+  // Force simulation
+  simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
+      // longer distance for higher-tier links
+      if (d.source.tier === 'core' || d.target.tier === 'core') return 140;
+      if (d.source.tier === 'distribution' || d.target.tier === 'distribution') return 110;
+      return 80;
+    }))
+    .force('charge', d3.forceManyBody().strength(-400))
+    .force('center', d3.forceCenter(W / 2, H / 2))
+    .force('collision', d3.forceCollide().radius(40));
+
+  // Draw links
+  const link = g.append('g')
+    .selectAll('line')
+    .data(links)
+    .join('line')
+    .attr('class', 'link')
+    .attr('stroke', '#1e2d42')
+    .attr('stroke-width', d => {
+      const s = parseInt(d.srtt) || 500;
+      return s < 500 ? 2.5 : s < 1500 ? 1.8 : 1.2;
+    });
+
+  // Draw nodes
+  const node = g.append('g')
+    .selectAll('g')
+    .data(nodes)
+    .join('g')
+    .attr('class', 'node')
+    .call(d3.drag()
+      .on('start', dragStart)
+      .on('drag',  dragged)
+      .on('end',   dragEnd)
+    );
+
+  // Node circles
+  node.append('circle')
+    .attr('r', d => {
+      const sizes = { core: 22, distribution: 18, 'dist-access': 14, access: 11 };
+      return sizes[d.tier] || 12;
+    })
+    .attr('fill', d => {
+      const hex = tierColorHex(d.tier);
+      return hex + '18'; // very transparent fill
+    })
+    .attr('stroke', d => tierColorHex(d.tier))
+    .style('color', d => tierColorHex(d.tier));
+
+  // Inner pulse ring
+  node.append('circle')
+    .attr('r', d => {
+      const sizes = { core: 22, distribution: 18, 'dist-access': 14, access: 11 };
+      return (sizes[d.tier] || 12) + 6;
+    })
+    .attr('fill', 'none')
+    .attr('stroke', d => tierColorHex(d.tier))
+    .attr('stroke-width', 0.5)
+    .attr('opacity', 0.2);
+
+  // Node labels
+  node.append('text')
+    .attr('dy', d => {
+      const sizes = { core: 22, distribution: 18, 'dist-access': 14, access: 11 };
+      return (sizes[d.tier] || 12) + 14;
+    })
+    .attr('text-anchor', 'middle')
+    .attr('fill', '#cbd5e1')
+    .attr('font-size', '10px')
+    .attr('font-family', "'JetBrains Mono', monospace")
+    .text(d => d.id);
+
+  // IP labels
+  node.append('text')
+    .attr('class', 'ip-label')
+    .attr('dy', d => {
+      const sizes = { core: 22, distribution: 18, 'dist-access': 14, access: 11 };
+      return (sizes[d.tier] || 12) + 26;
+    })
+    .attr('text-anchor', 'middle')
+    .attr('fill', '#475569')
+    .attr('font-size', '8px')
+    .attr('font-family', "'JetBrains Mono', monospace")
+    .text(d => d.ip);
+
+  // Tooltip
+  const tooltip = document.getElementById('tooltip');
+  node
+    .on('mouseover', (event, d) => {
+      tooltip.style.display = 'block';
+      document.getElementById('tt-name').textContent = d.id;
+      document.getElementById('tt-rows').innerHTML = `
+        <div class="tooltip-row"><span class="tooltip-key">IP</span><span class="tooltip-val">${d.ip}</span></div>
+        <div class="tooltip-row"><span class="tooltip-key">TIER</span><span class="tooltip-val">${d.tier}</span></div>
+      `;
+    })
+    .on('mousemove', (event) => {
+      tooltip.style.left = (event.clientX + 12) + 'px';
+      tooltip.style.top  = (event.clientY - 10) + 'px';
+    })
+    .on('mouseout', () => { tooltip.style.display = 'none'; })
+    .on('click', (event, d) => { showNodeDetail(d); });
+
+  // Simulation tick
+  simulation.on('tick', () => {
+    link
+      .attr('x1', d => d.source.x)
+      .attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x)
+      .attr('y2', d => d.target.y);
+
+    node.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+}
+
+function dragStart(event, d) {
+  if (!event.active) simulation.alphaTarget(0.3).restart();
+  d.fx = d.x; d.fy = d.y;
+}
+function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
+function dragEnd(event, d) {
+  if (!event.active) simulation.alphaTarget(0);
+  d.fx = null; d.fy = null;
+}
+
+// ── Node detail panel ─────────────────────────────────────────────────────
+function showNodeDetail(d) {
+  const panel = document.getElementById('node-detail');
+  panel.classList.add('visible');
+  document.getElementById('nd-name').textContent = d.id;
+
+  // Find connections
+  const conns = topologyData.connections.filter(
+    c => c.from === d.id || c.to === d.id
+  );
+
+  document.getElementById('nd-rows').innerHTML = `
+    <div class="node-detail-row">
+      <span class="node-detail-key">IP ADDRESS</span>
+      <span class="node-detail-val">${d.ip}</span>
+    </div>
+    <div class="node-detail-row">
+      <span class="node-detail-key">TIER</span>
+      <span class="node-detail-val" style="color:${tierColor(d.tier)}">${d.tier}</span>
+    </div>
+    <div class="node-detail-row">
+      <span class="node-detail-key">CONNECTIONS</span>
+      <span class="node-detail-val">${conns.length}</span>
+    </div>
+    ${conns.map(c => {
+      const peer = c.from === d.id ? c.to : c.from;
+      return `<div class="node-detail-row">
+        <span class="node-detail-key">↔ ${peer}</span>
+        <span class="node-detail-val">${c.srtt_ms}ms</span>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+// ── Highlight node from sidebar ───────────────────────────────────────────
+function highlightNode(id) {
+  d3.selectAll('.node circle')
+    .attr('stroke-width', d => d.id === id ? 4 : 2);
+}
+
+// ── Refresh progress bar ──────────────────────────────────────────────────
+function startRefreshBar() {
+  const bar = document.getElementById('refresh-bar');
+  let elapsed = 0;
+  clearInterval(refreshTimer);
+  bar.style.width = '100%';
+  bar.style.transition = 'none';
+
+  setTimeout(() => {
+    bar.style.transition = `width ${REFRESH_INTERVAL}s linear`;
+    bar.style.width = '0%';
+  }, 100);
+
+  refreshTimer = setInterval(() => {
+    elapsed += REFRESH_INTERVAL;
+    refreshAll();
+  }, REFRESH_INTERVAL * 1000);
+}
+
+function logout() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('username');
+  window.location.href = '/login';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+refreshAll().then(() => startRefreshBar());
+</script>
+</body>
+</html>

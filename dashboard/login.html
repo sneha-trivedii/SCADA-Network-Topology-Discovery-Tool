@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIL SCADA — Operator Login</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Barlow+Condensed:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0a0e13;
+    --bg2:       #0f1520;
+    --bg3:       #151d2e;
+    --amber:     #f59e0b;
+    --amber-dim: #92600a;
+    --teal:      #06b6d4;
+    --red:       #ef4444;
+    --text:      #cbd5e1;
+    --text-dim:  #475569;
+    --border:    #1e2d42;
+    --glow:      rgba(245,158,11,0.15);
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    overflow: hidden;
+  }
+
+  /* Animated grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  /* Scan line effect */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .corner { position: fixed; width: 60px; height: 60px; }
+  .corner--tl { top: 20px; left: 20px; border-top: 2px solid var(--amber); border-left: 2px solid var(--amber); }
+  .corner--tr { top: 20px; right: 20px; border-top: 2px solid var(--amber); border-right: 2px solid var(--amber); }
+  .corner--bl { bottom: 20px; left: 20px; border-bottom: 2px solid var(--amber); border-left: 2px solid var(--amber); }
+  .corner--br { bottom: 20px; right: 20px; border-bottom: 2px solid var(--amber); border-right: 2px solid var(--amber); }
+
+  .status-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--amber), var(--teal), transparent);
+    animation: scan 3s ease-in-out infinite;
+  }
+
+  @keyframes scan {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+
+  .wrapper {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 0;
+    animation: fadeIn 0.8s ease forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .logo-block {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+
+  .logo-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 16px;
+    position: relative;
+  }
+
+  .logo-icon svg { width: 64px; height: 64px; }
+
+  .logo-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4em;
+    color: var(--amber);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .logo-sub {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.2em;
+  }
+
+  .panel {
+    width: 380px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    position: relative;
+    padding: 40px;
+  }
+
+  .panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--glow) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .panel-header {
+    margin-bottom: 32px;
+  }
+
+  .panel-label {
+    font-size: 9px;
+    letter-spacing: 0.35em;
+    color: var(--amber);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-label::before {
+    content: '';
+    display: block;
+    width: 16px;
+    height: 1px;
+    background: var(--amber);
+  }
+
+  .panel-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 24px;
+    font-weight: 600;
+    color: #f1f5f9;
+    letter-spacing: 0.05em;
+  }
+
+  .field {
+    margin-bottom: 20px;
+  }
+
+  .field-label {
+    display: block;
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .field-input {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    padding: 12px 16px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    letter-spacing: 0.05em;
+  }
+
+  .field-input:focus {
+    border-color: var(--amber);
+    box-shadow: 0 0 0 3px var(--glow);
+  }
+
+  .field-input::placeholder { color: var(--text-dim); }
+
+  .btn {
+    width: 100%;
+    background: var(--amber);
+    color: #0a0e13;
+    border: none;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    padding: 14px;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: background 0.2s, transform 0.1s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn:hover { background: #fbbf24; }
+  .btn:active { transform: scale(0.99); }
+
+  .btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%);
+    transform: translateX(-100%);
+    transition: transform 0.4s;
+  }
+
+  .btn:hover::after { transform: translateX(100%); }
+
+  .error {
+    font-size: 11px;
+    color: var(--red);
+    margin-top: 12px;
+    letter-spacing: 0.05em;
+    display: none;
+    padding: 8px 12px;
+    border-left: 2px solid var(--red);
+    background: rgba(239,68,68,0.08);
+  }
+
+  .sys-info {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.15em;
+  }
+
+  .sys-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--teal);
+    margin-right: 6px;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+</style>
+</head>
+<body>
+
+<div class="status-bar"></div>
+<div class="corner corner--tl"></div>
+<div class="corner corner--tr"></div>
+<div class="corner corner--bl"></div>
+<div class="corner corner--br"></div>
+
+<div class="wrapper">
+  <div class="logo-block">
+    <div class="logo-icon">
+      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="32" cy="32" r="30" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 2"/>
+        <circle cx="32" cy="32" r="20" stroke="#06b6d4" stroke-width="1" opacity="0.5"/>
+        <circle cx="32" cy="32" r="4" fill="#f59e0b"/>
+        <line x1="32" y1="12" x2="32" y2="24" stroke="#f59e0b" stroke-width="1.5"/>
+        <line x1="32" y1="40" x2="32" y2="52" stroke="#f59e0b" stroke-width="1.5"/>
+        <line x1="12" y1="32" x2="24" y2="32" stroke="#f59e0b" stroke-width="1.5"/>
+        <line x1="40" y1="32" x2="52" y2="32" stroke="#f59e0b" stroke-width="1.5"/>
+        <circle cx="32" cy="12" r="3" fill="#06b6d4"/>
+        <circle cx="52" cy="32" r="3" fill="#06b6d4"/>
+        <circle cx="32" cy="52" r="3" fill="#06b6d4"/>
+        <circle cx="12" cy="32" r="3" fill="#06b6d4"/>
+      </svg>
+    </div>
+    <div class="logo-title">GAIL India Limited</div>
+    <div class="logo-sub">SCADA Network Operations</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-label">Operator Access</div>
+      <div class="panel-title">Topology Monitor</div>
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="username">Operator ID</label>
+      <input class="field-input" id="username" type="text"
+             placeholder="enter operator id" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="password">Passphrase</label>
+      <input class="field-input" id="password" type="password"
+             placeholder="••••••••">
+    </div>
+
+    <button class="btn" id="loginBtn" onclick="login()">
+      Authenticate
+    </button>
+
+    <div class="error" id="error">
+      ⚠ Authentication failed. Check credentials.
+    </div>
+
+    <div class="sys-info">
+      <span><span class="sys-dot"></span>SYSTEM ONLINE</span>
+      <span id="sysTime"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Live clock
+  function updateTime() {
+    const now = new Date();
+    document.getElementById('sysTime').textContent =
+      now.toLocaleTimeString('en-GB', {hour12: false}) + ' IST';
+  }
+  updateTime();
+  setInterval(updateTime, 1000);
+
+  async function login() {
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const btn      = document.getElementById('loginBtn');
+    const error    = document.getElementById('error');
+
+    if (!username || !password) {
+      error.style.display = 'block';
+      error.textContent   = '⚠ Operator ID and passphrase required.';
+      return;
+    }
+
+    btn.textContent = 'Authenticating...';
+    btn.disabled    = true;
+    error.style.display = 'none';
+
+    try {
+      const form = new FormData();
+      form.append('username', username);
+      form.append('password', password);
+
+      const res = await fetch('/auth/login', { method: 'POST', body: form });
+
+      if (!res.ok) throw new Error('Invalid credentials');
+
+      const data = await res.json();
+      localStorage.setItem('token', data.access_token);
+      localStorage.setItem('username', username);
+
+      btn.textContent = 'Access Granted ✓';
+      btn.style.background = '#10b981';
+
+      setTimeout(() => { window.location.href = '/'; }, 600);
+
+    } catch (e) {
+      error.style.display = 'block';
+      error.textContent   = '⚠ Authentication failed. Check credentials.';
+      btn.textContent     = 'Authenticate';
+      btn.disabled        = false;
+    }
+  }
+
+  // Enter key support
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter') login();
+  });
+</script>
+</body>
+</html>
