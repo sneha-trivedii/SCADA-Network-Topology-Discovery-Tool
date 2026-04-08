@@ -625,16 +625,22 @@ function drawTopology(devices, connections) {
   }));
 
   // Force simulation
+ // Tier Y positions — fixed vertical layers
+  const tierY = {
+    'core':         H * 0.15,
+    'distribution': H * 0.35,
+    'dist-access':  H * 0.62,
+    'access':       H * 0.85
+  };
+
+  // Force simulation
   simulation = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
-      // longer distance for higher-tier links
-      if (d.source.tier === 'core' || d.target.tier === 'core') return 140;
-      if (d.source.tier === 'distribution' || d.target.tier === 'distribution') return 110;
-      return 80;
-    }))
-    .force('charge', d3.forceManyBody().strength(-400))
+    .force('link', d3.forceLink(links).id(d => d.id).distance(100))
+    .force('charge', d3.forceManyBody().strength(-350))
     .force('center', d3.forceCenter(W / 2, H / 2))
-    .force('collision', d3.forceCollide().radius(40));
+    .force('collision', d3.forceCollide().radius(45))
+    .force('tierY', d3.forceY(d => tierY[d.tier] || H/2).strength(0.8))
+    .force('spreadX', d3.forceX(W / 2).strength(0.05));
 
   // Draw links
   const link = g.append('g')
