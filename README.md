@@ -1,7 +1,6 @@
 # GAIL SCADA — Network Topology Discovery Tool
 
 > Secure automatic network topology discovery for industrial pipeline SCADA networks.
-> Built for Smart India Hackathon 2024 — Problem Statement by GAIL (India) Limited.
 
 ---
 
