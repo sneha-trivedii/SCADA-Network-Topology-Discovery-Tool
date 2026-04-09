@@ -7,10 +7,6 @@
 
 ## Overview
 
-![Dashboard](docs/dashboard.png)
-
-![GNS3 Topology](docs/gns3-topology.png)
-
 Traditional network topology tools rely on CDP/LLDP protocols which are disabled in secure SCADA environments. This tool discovers and monitors network topology **without CDP/LLDP** using:
 
 - **SNMPv3** with SHA authentication and AES128/DES encryption
@@ -73,6 +69,8 @@ GNS3 Network (11 devices, SNMPv3)
 **Routing:** EIGRP AS1 across all devices
 **Security:** SNMPv3 SHA authentication + AES128 encryption (c7200) / DES encryption (c3745)
 
+![GNS3 Topology](docs/gns3-topology.png)
+
 ---
 
 ## Features
@@ -85,6 +83,8 @@ GNS3 Network (11 devices, SNMPv3)
 - **Historical Storage** — every snapshot stored in SQLite with full timestamp history
 - **Secure API** — JWT-authenticated REST API, all endpoints protected
 - **Professional Dashboard** — D3.js interactive topology map with live alerts and device status
+
+![Dashboard](docs/dashboard.png)
 
 ---
 
