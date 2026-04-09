@@ -168,6 +168,13 @@ def run_discovery_cycle():
         print("  ✓ First run — no previous snapshot to compare")
         new_topology["alerts"] = []
 
+    # Save to database
+    from graph.database     import save_snapshot
+    from graph.alert_engine import store_alerts
+    save_snapshot(new_topology)
+    if new_topology.get("alerts"):
+        store_alerts(new_topology["alerts"])
+
     # Save
     save_topology(new_topology)
     return new_topology

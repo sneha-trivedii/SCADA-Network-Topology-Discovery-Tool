@@ -1,208 +1,251 @@
-# GAIL SCADA Network Topology Discovery Tool
+# GAIL SCADA — Network Topology Discovery Tool
 
-> Automated network topology discovery, change detection, and visualisation for industrial SCADA environments — built for Smart India Hackathon.
-
-![Dashboard Preview](docs/screenshots/dashboard.png)
+> Secure automatic network topology discovery for industrial pipeline SCADA networks.
+> Built for Smart India Hackathon 2024 — Problem Statement by GAIL (India) Limited.
 
 ---
 
 ## Overview
 
-This tool continuously discovers and maps a live SCADA network using SNMPv3 polling, builds a graph model of devices and links, detects topology changes in real time, and serves everything through a secure REST API to an interactive D3.js dashboard.
+![Dashboard](docs/dashboard.png)
 
-Built against a GNS3-simulated GAIL pipeline network: 11 devices across 4 tiers, 13 links, EIGRP routing, SNMPv3 with SHA + AES128/DES authentication.
+![GNS3 Topology](docs/gns3-topology.png)
+
+Traditional network topology tools rely on CDP/LLDP protocols which are disabled in secure SCADA environments. This tool discovers and monitors network topology **without CDP/LLDP** using:
+
+- **SNMPv3** with SHA authentication and AES128/DES encryption
+- **EIGRP neighbour tables** for confirmed live link discovery
+- **ARP table cross-referencing** for device adjacency mapping
+- **Real-time change detection** with typed security alerts
+
+Any new device appearing on the network triggers an immediate **CRITICAL** alert — making rogue device detection automatic.
 
 ---
 
 ## Architecture
 
 ```
-GNS3 Virtual Network (11 devices · EIGRP AS1 · SNMPv3)
-        │  SNMP polls (pysnmp 4.4.12)
-        ▼
-┌─────────────────────────────────────────┐
-│  collector/                             │
-│  snmp_client · device_info · arp_reader │
-│  eigrp_reader · change_detector         │
-│  topology_output                        │
-└──────────────┬──────────────────────────┘
-               │
-        ┌──────▼──────┐      ┌─────────────────┐
-        │  SQLite DB  │      │  topology.json  │
-        │ topology.db │      │  (live snapshot)│
-        └──────┬──────┘      └────────┬────────┘
-               └──────────┬───────────┘
-                           │
-               ┌───────────▼───────────┐
-               │  FastAPI  (port 8000) │
-               │  JWT auth · REST API  │
-               └───────────┬───────────┘
-                           │
-        ┌──────────────────▼──────────────────┐
-        │  Dashboard (D3.js v7)               │
-        │  Hierarchical force graph · Alerts  │
-        └─────────────────────────────────────┘
+GNS3 Network (11 devices, SNMPv3)
+        ↓
+[ collector/ ]  — SNMPv3 queries, ARP tables, EIGRP neighbours
+        ↓
+[ graph/ ]      — NetworkX graph, SQLite storage, alert engine
+        ↓
+[ api/ ]        — FastAPI REST API, JWT authentication
+        ↓
+[ dashboard/ ]  — D3.js topology visualisation, live alerts
 ```
 
----
-
-## GNS3 Topology
-
-| Device | Role | Type | IP |
-|--------|------|------|----|
-| R1 | Core router | c7200 | 192.168.235.136 |
-| R2, R3 | Distribution | c7200 | 10.0.x.x |
-| R4–R7 | Dist-Access | c3745 | 10.0.x.x |
-| SWL1–SWL4 | Access | c3745 | 10.0.x.x |
-
-- **Routing:** EIGRP AS1
-- **SNMP:** v3, SHA + AES128 (c7200) / DES (c3745)
-- **Host:** Laptop VMnet1 = 192.168.235.1
-- **Static route:** `10.0.0.0/16 via 192.168.235.136`
-
-![GNS3 Topology](docs/screenshots/gns3_topology.png)
-
----
-
-## Tech Stack
+### Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Network simulation | GNS3, Cisco IOS (c7200, c3745) |
-| SNMP polling | pysnmp 4.4.12 |
-| Graph analysis | NetworkX (BFS, Dijkstra, articulation points, betweenness centrality) |
-| Storage | SQLAlchemy + SQLite |
-| API | FastAPI + JWT auth |
-| Frontend | D3.js v7, vanilla JS, industrial dark theme |
+|---|---|
+| Network Collection | Python, pysnmp 4.4.12 |
+| Graph Analysis | NetworkX |
+| Database | SQLite, SQLAlchemy |
+| API | FastAPI, JWT (python-jose) |
+| Dashboard | HTML, D3.js v7 |
+| Simulation | GNS3, Cisco IOS (c7200, c3745) |
 
 ---
 
-## Project Structure
+## Network Topology
+
+11-device three-tier hierarchical pipeline network:
 
 ```
-├── config/
-│   └── settings.py          # All device IPs, SNMPv3 credentials
-├── collector/
-│   ├── snmp_client.py        # SNMPv3 GET/WALK wrapper
-│   ├── device_info.py        # sysName, sysDescr, ifTable
-│   ├── arp_reader.py         # ARP table → neighbour discovery
-│   ├── eigrp_reader.py       # EIGRP neighbour + topology table
-│   ├── change_detector.py    # Diff engine, rogue device detection
-│   └── topology_output.py   # Write topology.json
-├── graph/
-│   ├── builder.py            # NetworkX graph construction
-│   ├── analyzer.py           # BFS, Dijkstra, centrality, bridges
-│   ├── database.py           # SQLAlchemy models + SQLite writes
-│   ├── alert_engine.py       # Generate alerts from change diffs
-│   └── pipeline.py           # Orchestration: collect → build → store → alert
-├── api/
-│   └── main.py               # FastAPI app, JWT, all endpoints
-├── dashboard/
-│   ├── login.html
-│   └── index.html            # D3.js force graph dashboard
-└── data/
-    ├── topology.json         # Live snapshot (written by pipeline)
-    └── topology.db           # SQLite database
+                    R1 (Core — Control Centre)
+                   /    \
+                 R2 ----- R3          ← Distribution (Regional Hubs)
+               /  \      /  \
+             R4----R5   R6---R7       ← Dist-Access (Field Stations)
+             |     |    |    |
+           SWL1   SWL2 SWL3 SWL4     ← Access (Field Switches)
 ```
+
+| Device | Role | Model | Tier |
+|---|---|---|---|
+| R1 | Control Centre Core | c7200 | Core |
+| R2, R3 | Regional Hubs (North/South) | c7200 | Distribution |
+| R4–R7 | Compressor/Metering Stations | c3745 | Dist-Access |
+| SWL1–SWL4 | Field Switch Panels | c3745 NM-16ESW | Access |
+
+**Routing:** EIGRP AS1 across all devices
+**Security:** SNMPv3 SHA authentication + AES128 encryption (c7200) / DES encryption (c3745)
 
 ---
 
-## Setup & Run
+## Features
+
+- **Automatic Discovery** — discovers all devices and links without manual input
+- **No CDP/LLDP** — works in secure environments where these protocols are disabled
+- **Rogue Device Detection** — any unknown device triggers CRITICAL alert immediately
+- **Link Failure Detection** — lost links generate HIGH severity alerts within one poll cycle
+- **Graph Analysis** — BFS traversal, Dijkstra shortest path, articulation points, bridges, centrality
+- **Historical Storage** — every snapshot stored in SQLite with full timestamp history
+- **Secure API** — JWT-authenticated REST API, all endpoints protected
+- **Professional Dashboard** — D3.js interactive topology map with live alerts and device status
+
+---
+
+## Setup
 
 ### Prerequisites
 
-```bash
-pip install fastapi uvicorn pysnmp==4.4.12 networkx sqlalchemy python-jose
-```
+- Python 3.10+
+- GNS3 with c7200 and c3745 IOS images
+- VMware (for GNS3 VM)
 
-### 1. Configure devices
-
-Edit `config/settings.py` — set device IPs and SNMPv3 credentials for your GNS3 topology.
-
-### 2. Run the discovery pipeline
+### Installation
 
 ```bash
-python -m graph.pipeline
+git clone https://github.com/sneha-trivedii/SCADA-Network-Topology-Discovery-Tool
+cd SCADA-Network-Topology-Discovery-Tool
+
+python -m venv venv
+venv\Scripts\activate          # Windows
+source venv/bin/activate       # Linux/Mac
+
+pip install -r requirements.txt
 ```
 
-Polls all devices, builds the graph, writes `topology.json` and `topology.db`, fires alerts on changes.
+### Configuration
 
-### 3. Start the API server
+Edit `config/settings.py`:
+
+- Set device IPs to match your network
+- Set SNMPv3 credentials (`SNMP_CONFIG`)
+- Adjust `COLLECTOR_INTERVAL_SECONDS` as needed (default: 60)
+
+### Running
+
+**Terminal 1 — Start API:**
 
 ```bash
 uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 4. Open the dashboard
+**Terminal 2 — Run continuous monitoring:**
 
-Navigate to `dashboard/login.html` in a browser.
+```bash
+python -m collector.change_detector continuous
+```
 
-**Default credentials:** `admin` / `gail2024`
+**Open dashboard:**
+
+```
+http://localhost:8000/login
+```
+
+Default credentials: `admin` / `gail2024`
 
 ---
 
 ## API Endpoints
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/auth/token` | Get JWT token |
-| GET | `/topology` | Full topology (nodes + links) |
-| GET | `/graph/stats` | Centrality, articulation points, bridges |
-| GET | `/alerts` | Active change alerts |
-| GET | `/devices` | All discovered devices |
+|---|---|---|
+| POST | `/auth/login` | Get JWT token |
+| GET | `/api/topology` | Full topology (devices + links) |
+| GET | `/api/devices` | Device list |
+| GET | `/api/connections` | Connection list |
+| GET | `/api/alerts` | Alerts with optional filters |
+| POST | `/api/alerts/{id}/ack` | Acknowledge an alert |
+| GET | `/api/analysis` | Graph analysis results |
+| GET | `/api/path?source=X&target=Y` | Shortest path between two devices |
+| GET | `/api/health` | Network health summary |
 
-All endpoints require `Authorization: Bearer <token>`.
+All endpoints except `/auth/login` require `Authorization: Bearer <token>` header.
 
-Interactive docs: [http://localhost:8000/docs](http://localhost:8000/docs)
-
----
-
-## Dashboard Features
-
-- **Hierarchical D3 force graph** — nodes fixed to tier Y positions (Core → Distribution → Dist-Access → Access)
-- **Click node** — highlights connected links, dims unrelated nodes
-- **Live alert polling** — checks `/alerts` every 5 seconds, shows amber banner on new events
-- **Industrial dark theme** — amber/teal colour scheme
-
-![Dashboard Graph](docs/screenshots/graph_view.png)
+Interactive API documentation available at `http://localhost:8000/docs`.
 
 ---
 
-## Alert Demo
-
-### Scenario A — Device goes down
+## Project Structure
 
 ```
-# In GNS3, on R7 console:
-R7(config)# interface f0/0
-R7(config-if)# shutdown
+SCADA-Network-Topology-Discovery-Tool/
+├── collector/
+│   ├── snmp_client.py        # SNMPv3 get/walk functions
+│   ├── device_info.py        # Device info via SNMP MIB-II
+│   ├── arp_reader.py         # ARP table reader
+│   ├── eigrp_reader.py       # EIGRP neighbour reader (Cisco MIB)
+│   ├── change_detector.py    # Snapshot comparison, alert generation
+│   └── topology_output.py    # Produces topology.json
+├── graph/
+│   ├── builder.py            # NetworkX graph builder
+│   ├── analyzer.py           # BFS, Dijkstra, articulation points, bridges
+│   ├── database.py           # SQLite storage via SQLAlchemy
+│   ├── alert_engine.py       # Alert deduplication and management
+│   └── pipeline.py           # Full pipeline orchestrator
+├── api/
+│   └── main.py               # FastAPI app, JWT auth, all endpoints
+├── dashboard/
+│   ├── login.html            # Operator login page
+│   └── index.html            # D3.js topology dashboard
+├── config/
+│   └── settings.py           # All configuration (IPs, credentials, intervals)
+├── docs/
+|   └── gns3-topology.png     # Actual GNS3 topology
+|   └── dashboard.png         # Snapshot of the dashboard
+├── data/                     # Runtime data (gitignored)
+│   ├── topology.json         # Live topology snapshot
+│   └── topology.db           # SQLite database
+└── requirements.txt
 ```
 
-Re-run `python -m graph.pipeline` → change_detector fires → alert appears in dashboard.
+---
 
-### Scenario B — Rogue device detected
+## Security Design
 
-Add a new host in GNS3 with an IP in `10.0.0.0/16` but credentials not in `settings.py`. The ARP reader picks it up from R1's ARP table → not in known device list → rogue device alert.
-
-![Alert Demo](docs/screenshots/alert_demo.png)
+- **SNMPv3** — all network queries encrypted and authenticated, no plaintext traffic
+- **No CDP/LLDP** — passive discovery only, no broadcast protocols required
+- **JWT Authentication** — all API endpoints protected with expiring tokens
+- **Rogue Detection** — any device not in known inventory triggers CRITICAL alert
+- **Audit Trail** — all topology snapshots and alerts stored with timestamps in SQLite
 
 ---
 
-## Security
+## Graph Analysis
 
-- **SNMPv3** with SHA authentication + AES128 encryption (c7200) / DES (c3745)
-- **JWT** bearer token authentication on all API endpoints
-- **Rogue device detection** — any MAC/IP not in the known device registry triggers an alert
-- No credentials stored in the frontend
+The tool runs the following algorithms on every discovered topology:
+
+| Algorithm | Purpose |
+|---|---|
+| BFS from core | Confirms network hierarchy, finds hop count to each device |
+| Dijkstra shortest path | Finds lowest-latency path between any two devices using srtt_ms weights |
+| Articulation points | Identifies single points of failure — devices whose removal splits the network |
+| Bridge detection | Identifies links with no redundant backup path |
+| Degree centrality | Ranks devices by connectivity importance |
 
 ---
 
-## Acknowledgements
+## Demo Scenarios
 
-Built solo for **Smart India Hackathon**, simulating the operational network topology of GAIL (Gas Authority of India Limited) pipeline infrastructure.
+**1. Normal Operation**
+Run pipeline → dashboard shows HEALTHY, all 11 devices, 13 links visible in hierarchy.
+
+**2. Link Failure**
+Shut down any router in GNS3 → change detector detects lost links within 60 seconds → dashboard shows LOST_LINK alerts with affected device pairs.
+
+**3. Rogue Device Detection**
+Connect unknown device to network → configure minimal SNMP → NEW_DEVICE CRITICAL alert appears on next poll → operator acknowledges and investigates.
 
 ---
 
-## License
+## Built With
 
-MIT
+- [pysnmp](https://pysnmp.readthedocs.io/) — SNMPv3 protocol implementation
+- [NetworkX](https://networkx.org/) — Graph analysis algorithms
+- [FastAPI](https://fastapi.tiangolo.com/) — REST API framework
+- [SQLAlchemy](https://www.sqlalchemy.org/) — Database ORM
+- [D3.js](https://d3js.org/) — Network topology visualisation
+- [GNS3](https://www.gns3.com/) — Network simulation
+
+---
+
+## Author
+
+Sneha Trivedi 
+Problem Statement: Secure Automatic Network Topology Discovery — GAIL (India) Limited
+GitHub: [sneha-trivedii/SCADA-Network-Topology-Discovery-Tool](https://github.com/sneha-trivedii/SCADA-Network-Topology-Discovery-Tool)

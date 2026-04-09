@@ -555,14 +555,34 @@ function updateHealthBadge(alertCount) {
 function renderDeviceList(devices) {
   const el = document.getElementById('device-list');
   document.getElementById('dev-count').textContent = devices.length;
-  el.innerHTML = devices.map(d => `
+
+  // Build set of devices that have active LOST_DEVICE alerts
+  const offlineIds = new Set(
+    (topologyData?.alerts || [])
+      .filter(a => a.type === 'LOST_DEVICE')
+      .map(a => a.details?.device_id)
+  );
+
+  // Also check connections — if device has 0 connections it may be isolated
+  const connectedIds = new Set();
+  if (topologyData?.connections) {
+    topologyData.connections.forEach(c => {
+      connectedIds.add(c.from);
+      connectedIds.add(c.to);
+    });
+  }
+
+  el.innerHTML = devices.map(d => {
+    const isOnline = connectedIds.has(d.device_id) || d.device_id === 'R1';
+    return `
     <div class="device-row" onclick="highlightNode('${d.device_id}')">
       <div class="device-tier-dot" style="background:${tierColor(d.tier)}"></div>
       <div class="device-name">${d.device_id}</div>
       <div class="device-ip">${d.ip}</div>
-      <div class="device-status"></div>
-    </div>
-  `).join('');
+      <div class="device-status" style="background:${isOnline ? 'var(--green)' : 'var(--red)'};
+        animation:${isOnline ? 'pulse 2s infinite' : 'blink 1s step-end infinite'}"></div>
+    </div>`;
+  }).join('');
 }
 
 // ── Alerts ────────────────────────────────────────────────────────────────
